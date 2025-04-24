@@ -5,7 +5,7 @@ from typing import List
 from langchain_core.documents import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores import FAISS
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -48,14 +48,31 @@ def split_documents(documents: List[Document]) -> List[Document]:
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     return text_splitter.split_documents(documents)
 
-def create_vector_store(documents: List[Document]) -> Chroma:
+# def create_vector_store(documents: List[Document]) -> Chroma:
+#     embeddings = OpenAIEmbeddings(model="text-embedding-3-small", api_key=openai_api_key)
+#     vector_store = Chroma.from_documents(documents, embeddings, persist_directory="./chroma_db")
+#     return vector_store
+def create_vector_store(documents: List[Document]) -> FAISS:
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small", api_key=openai_api_key)
-    vector_store = Chroma.from_documents(documents, embeddings, persist_directory="./chroma_db")
+    vector_store = FAISS.from_documents(documents, embeddings)
+    # Save the FAISS index to a file
+    vector_store.save_local("faiss_index")
     return vector_store
-
-def load_existing_vector_store() -> Chroma:
+def load_existing_vector_store() -> FAISS:
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small", api_key=openai_api_key)
-    return Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
+    # Load the FAISS index from the file
+    return FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+
+def create_retriever_tool_instance(vector_store: FAISS) -> Tool:  # Update type hint to FAISS
+    retriever = vector_store.as_retriever(search_kwargs={"k": 15})
+    return create_retriever_tool(
+        retriever,
+        "retrieve_documents",
+        "Search tabular CSV data for relevant rows, especially for revenue and user data."
+    )
+# def load_existing_vector_store() -> Chroma:
+#     embeddings = OpenAIEmbeddings(model="text-embedding-3-small", api_key=openai_api_key)
+#     return Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
 
 def table_query_tool(query: str) -> str:
     prompt = PromptTemplate(
@@ -94,15 +111,18 @@ def extract_division_name(query: str) -> str:
             return division
     return None
 
-def create_retriever_tool_instance(vector_store: Chroma) -> Tool:
-    retriever = vector_store.as_retriever(search_kwargs={"k": 15})
-    return create_retriever_tool(
-        retriever,
-        "retrieve_documents",
-        "Search tabular CSV data for relevant rows, especially for revenue and user data."
-    )
+# def create_retriever_tool_instance(vector_store: Chroma) -> Tool:
+#     retriever = vector_store.as_retriever(search_kwargs={"k": 15})
+#     return create_retriever_tool(
+#         retriever,
+#         "retrieve_documents",
+#         "Search tabular CSV data for relevant rows, especially for revenue and user data."
+#     )
 
-def create_agent(vector_store: Chroma) -> AgentExecutor:
+# def create_agent(vector_store: Chroma) -> AgentExecutor:
+#     llm = ChatOpenAI(model_name="gpt-4o-mini", api_key=openai_api_key, temperature=0)
+#     tools = [create_retriever_tool_instance(vector_store), create_table_query_tool()]
+def create_agent(vector_store: FAISS) -> AgentExecutor:  # Update type hint to FAISS
     llm = ChatOpenAI(model_name="gpt-4o-mini", api_key=openai_api_key, temperature=0)
     tools = [create_retriever_tool_instance(vector_store), create_table_query_tool()]
     
