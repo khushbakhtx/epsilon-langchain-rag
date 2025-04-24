@@ -6,4 +6,3 @@ pandas
 python-dotenv
 chromadb
 openai
-libsqlite3
