@@ -1,9 +1,8 @@
-langchain==0.1.14
-langchain-community
-streamlit
-langchain-openai
-openpyxl 
-openai
-chromadb
-unstructured
-pandas
+streamlit==1.38.0
+langchain==0.3.0
+langchain-openai==0.2.0
+langchain-community==0.3.0
+pandas==2.2.2
+python-dotenv==1.0.1
+chromadb==0.5.5
+openai==1.46.1
