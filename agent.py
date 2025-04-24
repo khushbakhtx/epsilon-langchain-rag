@@ -27,12 +27,6 @@ if not openai_api_key:
     )
     st.stop()
 
-csv_paths = [
-    "csv_data/main_metrics.csv",
-    "csv_data/train_and_forecast.csv",
-    "csv_data/var1_correlations.csv"
-]
-
 def load_csv_documents(csv_paths: List[str]) -> List[Document]:
     documents = []
     for csv_path in csv_paths:
@@ -54,11 +48,14 @@ def split_documents(documents: List[Document]) -> List[Document]:
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     return text_splitter.split_documents(documents)
 
-@st.cache_resource
 def create_vector_store(documents: List[Document]) -> Chroma:
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small", api_key=openai_api_key)
-    vector_store = Chroma.from_documents(documents, embeddings)  # In-memory
+    vector_store = Chroma.from_documents(documents, embeddings, persist_directory="./chroma_db")
     return vector_store
+
+def load_existing_vector_store() -> Chroma:
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-small", api_key=openai_api_key)
+    return Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
 
 def table_query_tool(query: str) -> str:
     prompt = PromptTemplate(
@@ -125,7 +122,7 @@ def create_agent(vector_store: Chroma) -> AgentExecutor:
         "Какие операционные доходы получит {{*division name*}} в следующем квартале при умеренном варианте?": 
             "| дивизион | сумма операционных доходов, млн тенге |\n| --- | --- |\n| Дивизион по розничному бизнесу | 31112.6142 |\n| Дивизион по корпоративному бизнесу | 22636.4918 |\n| Корпоративный университет | 623.2560 |\n| Дирекция управления проектами (ДУП) | -267.7601 |\n| Дирекция телеком-комплектации | -347.0824 |\n| Центральный аппарат Акционерного Общества 'Казахтелеком' | -579.7574 |\n| Дивизион информационных технологий | -2523.2425 |\n| Сервисная Фабрика | -6890.7367 |\n| Объединение 'Дивизион Сеть' | -14441.4565 |",
         "Покажи суммарные показатели по всем дивизионам.": 
-            "За 25 апреля 2025 года\n\n| показатель | суммарное значение прогноза |\n| --- | --- |\n| ARPU | 91796.5224 |\n| EBITDA | 6801.5864 |\n| валовая прибыль | 9440.8267 |\n| доход | 26752.7798 |\n| операционная прибыль | 9169.8323 |\n| операционные расходы | 18800.8778 |\n| отток | 238156.0000 |\n| приток | 0.0000 |\n| расход | 23996.8602 |",
+            "За 25 апреля 2025 года\n\n| показатель | суммарное значение прогноза |\n| --- | --- |\n| ARPU | 91796.5224 |\n| EBITDA | 6801.5864 |\n| валовая прибыль | 9440.8267 |\n| доход | 26752.779 planting |\n| операционная прибыль | 9169.8323 |\n| операционные расходы | 18800.8778 |\n| отток | 238156.0000 |\n| приток | 0.0000 |\n| расход | 23996.8602 |",
         "Построй график прогнозов по операционным показателям на максимально возможный период и интерпретируй его.": 
             "*Графики доступны в разделе Results.*",
         "Какой АРПУ будет в следующем месяце?": 
@@ -214,23 +211,22 @@ def create_agent(vector_store: Chroma) -> AgentExecutor:
         return_intermediate_steps=True
     )
 
-@st.cache_resource
-def get_vector_store():
-    documents = load_csv_documents(csv_paths)
-    if not documents:
-        st.error("No valid CSV data loaded. Check file paths and formats.")
-        return None
-    split_docs = split_documents(documents)
-    return create_vector_store(split_docs)
-
 def main():
-    st.title("LangChain RAG Agent")
+    st.title("epsilon.ai agent")
     st.write("Epsilon RAG agent uses OpenAI embedding model and Chroma vector store to process CSV data and answer queries.")
+
+    csv_paths = [
+        "csv_data/main_metrics.csv",
+        "csv_data/train_and_forecast.csv",
+        "csv_data/var1_correlations.csv"
+    ]
 
     if "vector_store" not in st.session_state:
         st.session_state.vector_store = None
     if "agent_executor" not in st.session_state:
         st.session_state.agent_executor = None
+    if "file_names" not in st.session_state:
+        st.session_state.file_names = []
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "is_initialized" not in st.session_state:
@@ -238,12 +234,24 @@ def main():
 
     if not st.session_state.is_initialized:
         with st.spinner("Processing your data and creating vector store..."):
-            st.session_state.vector_store = get_vector_store()
-            if st.session_state.vector_store is None:
-                return
-            st.session_state.agent_executor = create_agent(st.session_state.vector_store)
-            st.session_state.is_initialized = True
-            st.success("CSV files processed and vector store created.")
+            current_file_names = sorted(csv_paths)
+            if current_file_names != st.session_state.file_names or not st.session_state.vector_store:
+                st.session_state.file_names = current_file_names
+                documents = load_csv_documents(csv_paths)
+                if not documents:
+                    st.error("No valid CSV data loaded. Check file paths and formats.")
+                    return
+                split_docs = split_documents(documents)
+                st.session_state.vector_store = create_vector_store(split_docs)
+                st.session_state.agent_executor = create_agent(st.session_state.vector_store)
+                st.session_state.is_initialized = True
+                st.success("CSV files processed and vector store created.")
+            else:
+                st.session_state.vector_store = load_existing_vector_store()
+                if not st.session_state.agent_executor:
+                    st.session_state.agent_executor = create_agent(st.session_state.vector_store)
+                st.session_state.is_initialized = True
+                st.info("Using existing vector store.")
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
