@@ -1,0 +1,9 @@
+langchain==0.1.14
+langchain-community
+streamlit
+langchain-openai
+openpyxl 
+openai
+chromadb
+unstructured
+pandas
