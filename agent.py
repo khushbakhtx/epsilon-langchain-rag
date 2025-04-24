@@ -285,7 +285,7 @@ def main():
                         st.image(image_path, caption="Прогнозы по операционным показателям")
                         answer = "Прогнозы по операционным показателям представлены на графике выше."
                     else:
-                        answer = f"Извините, изображение графика не найдено. Пожалуйста, проверьте наличие файла по пути: {image_path}"
+                        answer = f"Извините, не получилось сгенерировать график"
                 
                 st.session_state.messages.append({"role": "assistant", "content": answer})
                 with st.chat_message("assistant"):
