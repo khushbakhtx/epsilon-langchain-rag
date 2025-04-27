@@ -222,7 +222,7 @@ def create_agent(vector_store: FAISS) -> AgentExecutor:
     )
 
 def main():
-    st.title("Epsilon AI Agent")
+    st.title("epsilon3.ai Agent")
 
     csv_paths = [
         "csv_data/main_metrics.csv",
